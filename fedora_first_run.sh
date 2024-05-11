@@ -53,7 +53,7 @@ if [ -n "$UUID" ]; then
     echo "UUID of $LABEL: $UUID"
 
     # Prepare the fstab entry string
-    FSTAB_ENTRY="UUID=$UUID  /mnt/$LABEL  ext4  defaults  0  2"
+    FSTAB_ENTRY="UUID=$UUID  /mnt/$LABEL  $FSTYPE  defaults  0  2"
 
     # Check if the entry already exists in fstab to avoid duplicates
     if grep -q "$FSTAB_ENTRY" /etc/fstab; then

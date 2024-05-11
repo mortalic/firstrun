@@ -1,0 +1,5 @@
+# This is a CODEOWNERS file
+# It specifies the individuals who are responsible for the code in the repository.
+
+# The following line specifies that 'mortalic' is the owner of all files in the repository.
+* @mortalic
