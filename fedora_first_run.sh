@@ -6,6 +6,24 @@ LABEL=crucial2tb
 USER=nathan
 GROUP=nathan
 PERMISSION=755
+HOSTNAME=nathan-legion
+PRETTYHOSTNAME="Nathan's Gaming Laptop"
+
+
+echo "Do you want to change the hostname to $PRETTYHOSTNAME? (y/n)"
+read -r response
+response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+
+if [[ "$response" == "y" || "$response" == "yes" ]]; then
+    echo "Changing Hostname..."
+    sudo hostnamectl set-hostname "$HOSTNAME"
+    sudo hostnamectl set-hostname "$PRETTYHOSTNAME" --pretty
+
+    echo "Hostname changed to $PRETTYHOSTNAME."
+else
+    echo "Hostname change aborted by the user."
+fi
+
 
 #Enable RPM Fusion:
 echo "Enabling RPM Fusion free and non-free"
@@ -172,7 +190,7 @@ else
     echo "Installation aborted by the user."
 fi
 
-#Install Beyond All Reason
+#Install nVidia Drivers
 echo "Do you want to install nVidia Drivers? (y/n)"
 read -r response
 response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
