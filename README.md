@@ -28,6 +28,12 @@ This script automates the setup of a Fedora system, including enabling repositor
     sudo ./setup_fedora.sh
     ```
 
+Or, if you are lazy, here is a oneliner with curl:
+
+```bash
+curl -s -o- https://raw.githubusercontent.com/mortalic/firstrun/main/fedora_first_run.sh | sudo bash
+```
+
 ## Requirements
 
 - Fedora Linux (the script is tested on Fedora, adjustments might be necessary for other distributions).
