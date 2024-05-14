@@ -18,17 +18,12 @@ This script automates the setup of a Fedora system, including enabling repositor
     cd <repository-directory>
     ```
 
-2. **Make the script executable**:
-    ```bash
-    chmod +x setup_fedora.sh
-    ```
-
-3. **Run the script**:
+2. **Run the script**:
     ```bash
     sudo ./setup_fedora.sh
     ```
 
-4. **Or, if you are lazy, here is a oneliner with curl**:
+3. **Or, if you are lazy, here is a oneliner with curl**:
     ```bash
     curl -s -o- https://raw.githubusercontent.com/mortalic/firstrun/main/fedora_first_run.sh | sudo bash
     ```
