@@ -16,7 +16,7 @@ HOSTNAME_PRETTY="Nathan Framework 16"
 
 # Secondary drive (by label)
 CONFIGURE_SECOND_DRIVE=1
-SECOND_DRIVE_LABEL="crucial2tb"            # e.g. your Steam library
+SECOND_DRIVE_LABEL="games"            # e.g. your Steam library
 SECOND_DRIVE_MOUNT="/mnt/${SECOND_DRIVE_LABEL}"
 SECOND_DRIVE_MODE="0755"
 
@@ -48,7 +48,16 @@ DRY_RUN=0
 log(){ printf "\e[1;32m[+]\e[0m %s\n" "$*"; }
 warn(){ printf "\e[1;33m[!]\e[0m %s\n" "$*"; }
 err(){ printf "\e[1;31m[x]\e[0m %s\n" "$*" 1>&2; }
-run(){ if [[ $DRY_RUN -eq 1 ]]; then printf 'DRY-RUN: %q\n' "$*"; else eval "$@"; fi }
+run() {
+  if [[ $DRY_RUN -eq 1 ]]; then
+    printf 'DRY-RUN:'
+    printf ' %q' "$@"
+    printf '\n'
+  else
+    "$@"
+  fi
+}
+
 need(){ command -v "$1" >/dev/null 2>&1 || { err "Missing command: $1"; exit 1; }; }
 require_root(){ if [[ $EUID -ne 0 ]]; then err "Run as root: sudo bash $0"; exit 1; fi }
 
