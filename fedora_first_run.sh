@@ -1,205 +1,214 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Fedora 43 – Personal Profile Installer (Non-Interactive)
+# Converts an interactive, prompt-based setup into a toggle-based, idempotent script.
+# Edit the USER CONFIG section, then run once as root.
 
-# Global variables
-#the LABEL of the second nvme drive (steam library for me)
-LABEL=crucial2tb
-USER=nathan
-GROUP=nathan
-PERMISSION=755
-HOSTNAME=nathan-legion
-PRETTYHOSTNAME="Nathan's Gaming Laptop"
+set -Eeuo pipefail
+IFS=$'\n\t'
 
+### ===== USER CONFIG (edit these) ===== ###
+# Identity & host
+USER_NAME="nathan"
+USER_GROUP="nathan"
+SET_HOSTNAME=1
+HOSTNAME_SHORT="nathan-framework16"
+HOSTNAME_PRETTY="Nathan's Framework 16"
 
-echo "Do you want to change the hostname to $PRETTYHOSTNAME? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+# Secondary drive (by label)
+CONFIGURE_SECOND_DRIVE=1
+SECOND_DRIVE_LABEL="crucial2tb"            # e.g. your Steam library
+SECOND_DRIVE_MOUNT="/mnt/${SECOND_DRIVE_LABEL}"
+SECOND_DRIVE_MODE="0755"
 
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Changing Hostname..."
-    sudo hostnamectl set-hostname "$HOSTNAME"
-    sudo hostnamectl set-hostname "$PRETTYHOSTNAME" --pretty
+# Repos & codecs
+ENABLE_RPMFUSION=1
+INSTALL_MULTIMEDIA=1        # Uses ffmpeg + gstreamer rather than fragile Group names
 
-    echo "Hostname changed to $PRETTYHOSTNAME."
+# Apps (DNF)
+INSTALL_GIT=1
+INSTALL_STEAM=1
+INSTALL_DISCORD=1
+INSTALL_SYNCTHING=1
+
+# Flatpak & apps
+INSTALL_FLATPAK=1
+INSTALL_SIGNAL_FLATPAK=1
+INSTALL_BAR_FLATPAK=0       # Beyond All Reason
+
+# VSCodium
+INSTALL_VSCODIUM=1
+
+# NVIDIA drivers (only if truly needed)
+INSTALL_NVIDIA=0
+
+# Dry-run mode for testing (0 = real run, 1 = print only)
+DRY_RUN=0
+
+### ===== Helpers ===== ###
+log(){ printf "\e[1;32m[+]\e[0m %s\n" "$*"; }
+warn(){ printf "\e[1;33m[!]\e[0m %s\n" "$*"; }
+err(){ printf "\e[1;31m[x]\e[0m %s\n" "$*" 1>&2; }
+run(){ if [[ $DRY_RUN -eq 1 ]]; then printf 'DRY-RUN: %q\n' "$*"; else eval "$@"; fi }
+need(){ command -v "$1" >/dev/null 2>&1 || { err "Missing command: $1"; exit 1; }; }
+require_root(){ if [[ $EUID -ne 0 ]]; then err "Run as root: sudo bash $0"; exit 1; fi }
+
+### ===== Start ===== ###
+require_root
+need dnf
+
+# 0) Refresh cache early
+log "Refreshing package metadata…"
+run dnf -y makecache || true
+
+# 1) Hostname (non-interactive)
+if [[ $SET_HOSTNAME -eq 1 ]]; then
+  log "Setting hostnames: $HOSTNAME_SHORT / $HOSTNAME_PRETTY"
+  run hostnamectl set-hostname "$HOSTNAME_SHORT"
+  run hostnamectl set-hostname "$HOSTNAME_PRETTY" --pretty
 else
-    echo "Hostname change aborted by the user."
+  log "Skipping hostname change"
 fi
 
-
-#Enable RPM Fusion:
-echo "Enabling RPM Fusion free and non-free"
-sudo dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
-sudo dnf install -y https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
-
-# Multimedia codecs, allows gifs, videos and all streaming services
-echo "Installing Fedora multimedia codes"
-sudo dnf group install -y Multimedia
-
-# Syncthing
-echo "Do you want to install Syncthing? (y/n)"
-read -r response
-
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing Syncthing..."
-    sudo dnf install -y syncthing
+# 2) RPM Fusion
+if [[ $ENABLE_RPMFUSION -eq 1 ]]; then
+  FEDVER=$(rpm -E %fedora)
+  log "Enabling RPM Fusion Free/Nonfree for Fedora $FEDVER"
+  run dnf -y install \
+    "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${FEDVER}.noarch.rpm" \
+    "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${FEDVER}.noarch.rpm" || true
+  run dnf -y makecache || true
 else
-    echo "Installation aborted by the user."
+  log "Skipping RPM Fusion"
 fi
 
-
-#Setup second drive mount point
-echo "Do you have a second drive you would like to setup (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Creating mountpoint for second drive"
-    sudo mkdir /mnt/$LABEL
-    sudo chown -R $USER:$GROUP /mnt/$LABEL
-    sudo chmod $PERMISSION /mnt/$LABEL
+# 3) Multimedia codecs (avoid fragile group names like 'Multimedia')
+if [[ $INSTALL_MULTIMEDIA -eq 1 ]]; then
+  log "Installing multimedia codecs (ffmpeg, gstreamer, openh264, lame-libs)…"
+  run dnf -y install ffmpeg gstreamer1-plugin-openh264 \
+    gstreamer1-plugins-{bad-free,good,ugly,base} lame-libs || true
 else
-    echo "Installation aborted by the user."
+  log "Skipping multimedia codecs"
 fi
 
+# 4) Syncthing
+if [[ ${INSTALL_SYNCTHING:-0} -eq 1 ]]; then
+  log "Installing Syncthing…"
+  run dnf -y install syncthing || true
+else
+  log "Skipping Syncthing"
+fi
 
-# Extract UUID and FSTYPE from the drive labeled $LABEL
-INFO=$(sudo blkid | grep "LABEL=\"$LABEL\"")
-UUID=$(echo "$INFO" | awk -F '"' '{print $4}')
-FSTYPE=$(echo "$INFO" | awk -F '"' '{print $8}')
+# 5) Second drive setup (by label)
+if [[ $CONFIGURE_SECOND_DRIVE -eq 1 ]]; then
+  need blkid
+  log "Configuring second drive: LABEL='${SECOND_DRIVE_LABEL}' at '${SECOND_DRIVE_MOUNT}'"
 
-# Check if the UUID was successfully retrieved
-if [ -n "$UUID" ]; then
-    echo "UUID of $LABEL: $UUID"
+  # Create mountpoint & ownership/mode (idempotent)
+  run install -d -m "$SECOND_DRIVE_MODE" -o "$USER_NAME" -g "$USER_GROUP" "$SECOND_DRIVE_MOUNT"
 
-    # Prepare the fstab entry string
-    FSTAB_ENTRY="UUID=$UUID  /mnt/$LABEL  $FSTYPE  defaults  0  2"
+  # Extract UUID & FSTYPE from blkid
+  INFO=$(blkid | grep -E "LABEL=\"${SECOND_DRIVE_LABEL}\"" || true)
+  if [[ -n "$INFO" ]]; then
+    UUID=$(awk -F '"' '{for(i=1;i<=NF;i++){if($(i-1)~/(^| )UUID=$/){print $i}}}' <<<"$INFO" | head -n1)
+    FSTYPE=$(awk -F '"' '{for(i=1;i<=NF;i++){if($(i-1)~/(^| )TYPE=$/){print $i}}}' <<<"$INFO" | head -n1)
+  else
+    UUID=""; FSTYPE=""
+  fi
 
-    # Check if the entry already exists in fstab to avoid duplicates
-    if grep -q "$FSTAB_ENTRY" /etc/fstab; then
-        echo "Entry already exists in /etc/fstab."
+  if [[ -z "$UUID" || -z "$FSTYPE" ]]; then
+    warn "Could not resolve UUID/FSTYPE for LABEL='${SECOND_DRIVE_LABEL}'. Skipping fstab update."
+  else
+    FSTAB_ENTRY="UUID=${UUID}  ${SECOND_DRIVE_MOUNT}  ${FSTYPE}  defaults  0  2"
+    log "Ensuring /etc/fstab contains entry for ${SECOND_DRIVE_LABEL} (${FSTYPE})"
+    if grep -Fqx -- "$FSTAB_ENTRY" /etc/fstab 2>/dev/null; then
+      log "fstab entry already present"
     else
-        # Append the new fstab entry
-        echo "$FSTAB_ENTRY" | sudo tee -a /etc/fstab > /dev/null
-        echo "New fstab entry added."
+      run bash -c "printf '%s\n' '$FSTAB_ENTRY' >> /etc/fstab"
+      log "fstab entry added"
     fi
+    log "Reloading units & mounting all"
+    run systemctl daemon-reload || true
+    run mount -a || warn "mount -a returned non-zero; verify filesystem"
+  fi
 else
-    echo "No UUID found for the label $LABEL"
+  log "Skipping second drive configuration"
 fi
 
-echo "running daemon-reload"
-systemctl daemon-reload
-
-echo "mounting $LABEL"
-sudo mount -a
-
-#install steam
-echo "Do you want to install steam? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing steam..."
-    sudo dnf install -y steam
+# 6) Steam
+if [[ $INSTALL_STEAM -eq 1 ]]; then
+  log "Installing Steam…"
+  run dnf -y install steam || true
 else
-    echo "Installation aborted by the user."
+  log "Skipping Steam"
 fi
 
-
-#install discord
-echo "Do you want to install discord? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing discord..."
-    sudo dnf install -y discord
+# 7) Discord
+if [[ $INSTALL_DISCORD -eq 1 ]]; then
+  log "Installing Discord…"
+  run dnf -y install discord || true
 else
-    echo "Installation aborted by the user."
+  log "Skipping Discord"
 fi
 
-# Installing Git
-echo "Do you want to install git? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing git..."
-    sudo dnf install -y git
+# 8) Git
+if [[ $INSTALL_GIT -eq 1 ]]; then
+  log "Installing Git…"
+  run dnf -y install git || true
 else
-    echo "Installation aborted by the user."
+  log "Skipping Git"
 fi
 
-# Installing Flatpak
-echo "Do you want to install flatpak? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing flatpak..."
-    sudo dnf install -y flatpak
-    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+# 9) Flatpak + Flathub + Apps
+if [[ $INSTALL_FLATPAK -eq 1 ]]; then
+  if command -v flatpak >/dev/null 2>&1; then
+    log "Flatpak already present"
+  else
+    log "Installing Flatpak…"
+    run dnf -y install flatpak || true
+  fi
+  log "Enabling Flathub remote (idempotent)…"
+  run flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
 
+  if [[ $INSTALL_SIGNAL_FLATPAK -eq 1 ]]; then
+    log "Installing Signal (Flatpak)…"
+    run flatpak install -y flathub org.signal.Signal || true
+  fi
+  if [[ $INSTALL_BAR_FLATPAK -eq 1 ]]; then
+    log "Installing Beyond All Reason (Flatpak)…"
+    run flatpak install -y flathub info.beyondallreason.bar || true
+  fi
 else
-    echo "Installation aborted by the user."
+  log "Skipping Flatpak setup"
 fi
 
-#Installing Signal
-echo "Do you want to install signal (Flatpak)? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing signal..."
-    flatpak install flathub org.signal.Signal
+# 10) VSCodium repo + install (idempotent)
+if [[ $INSTALL_VSCODIUM -eq 1 ]]; then
+  log "Setting up VSCodium repo + installing codium…"
+  GPG_KEY_URL="https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg"
+  REPO_FILE="/etc/yum.repos.d/vscodium.repo"
+  REPO_CONTENT="[gitlab.com_paulcarroty_vscodium_repo]\nname=download.vscodium.com\nbaseurl=https://download.vscodium.com/rpms/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=${GPG_KEY_URL}\nmetadata_expire=1h"
 
+  # Import key (safe to re-run)
+  run rpmkeys --import "$GPG_KEY_URL" || true
+
+  if [[ -f "$REPO_FILE" ]]; then
+    log "VSCodium repo already exists"
+  else
+    log "Creating $REPO_FILE"
+    run bash -c "printf '%b' '$REPO_CONTENT' > '$REPO_FILE'"
+  fi
+  run dnf -y install codium || true
 else
-    echo "Installation aborted by the user."
+  log "Skipping VSCodium"
 fi
 
-#Install Beyond All Reason
-echo "Do you want to install Beyond All Reason (Flatpak)? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing Beyond All Reason..."
-    flatpak install flathub info.beyondallreason.bar
-
+# 11) NVIDIA drivers (if you truly need them)
+if [[ $INSTALL_NVIDIA -eq 1 ]]; then
+  log "Installing NVIDIA akmods & CUDA packages…"
+  run dnf -y upgrade --refresh || true
+  run dnf -y install akmod-nvidia xorg-x11-drv-nvidia-cuda || true
 else
-    echo "Installation aborted by the user."
+  log "Skipping NVIDIA drivers"
 fi
 
-#Install codium
-echo "Do you want to install Codium? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing Codium..."
-    GPG_KEY_URL="https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg"
-    REPO_FILE="/etc/yum.repos.d/vscodium.repo"
-    REPO_NAME="gitlab.com_paulcarroty_vscodium_repo"
-    REPO_BASEURL="https://download.vscodium.com/rpms/"
-
-    # Import the GPG key for the repository
-    sudo rpmkeys --import "$GPG_KEY_URL"
-
-    # Check if the repo file already exists to prevent duplicate entries
-    if [ ! -f "$REPO_FILE" ]; then
-        # Create the repo file
-        echo -e "[${REPO_NAME}]\nname=download.vscodium.com\nbaseurl=${REPO_BASEURL}\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=${GPG_KEY_URL}\nmetadata_expire=1h" | sudo tee "$REPO_FILE"
-    else
-        echo "Repository file already exists, skipping creation."
-    fi
-
-    # Install Codium using DNF
-    sudo dnf install -y codium
-else
-    echo "Installation aborted by the user."
-fi
-
-#Install nVidia Drivers
-echo "Do you want to install nVidia Drivers? (y/n)"
-read -r response
-response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-if [[ "$response" == "y" || "$response" == "yes" ]]; then
-    echo "Installing nVidia Drivers..."
-    sudo dnf update -y # and reboot if you are not on the latest kernel
-    sudo dnf install akmod-nvidia # rhel/centos users can use kmod-nvidia instead
-    sudo dnf install xorg-x11-drv-nvidia-cuda #optional for cuda/nvdec/nvenc support
-
-else
-    echo "Installation aborted by the user."
-fi
+log "Done. Re-run safely anytime; steps are idempotent."
