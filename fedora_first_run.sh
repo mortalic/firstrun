@@ -12,7 +12,7 @@ USER_NAME="nathan"
 USER_GROUP="nathan"
 SET_HOSTNAME=1
 HOSTNAME_SHORT="nathan-framework16"
-HOSTNAME_PRETTY="Nathan's Framework 16"
+HOSTNAME_PRETTY="Nathan Framework 16"
 
 # Secondary drive (by label)
 CONFIGURE_SECOND_DRIVE=1
