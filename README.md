@@ -1,70 +1,57 @@
-# Fedora Post-Installation Setup Script
+# Fedora 43 Post-Installation Setup Script
 
-This script automates the setup of a Fedora system, including enabling repositories, installing essential software, and configuring devices. It's designed to run after a fresh installation of Fedora, helping users quickly set up their environment according to their needs.
+This script automates post-install configuration on Fedora 43, enabling common repositories, installing key applications, configuring storage, and applying AMD GPU kernel tuning for AMD setups.
 
-## Features
+## What it does
 
-- **RPM Fusion Repository**: Enables the RPM Fusion free and non-free repositories, essential for multimedia packages and other software not included in the official Fedora repositories.
-- **Multimedia Codecs**: Installs multimedia groups for enhanced media playback capabilities.
-- **Conditional Software Installation**: Prompts the user to install various applications such as Syncthing, Steam, Discord, Git, Flatpak, Signal, Beyond All Reason, Codium, and Nvidia Drivers. The user can choose to install or skip each application.
-- **Drive Setup**: Offers to set up a mount point for a secondary drive, automatically adding it to the `fstab` for persistent mounting.
-- **User and Permissions Management**: Sets the owner and permissions for the newly created mount point.
+- **Hostname & identity**
+  - Sets system hostname and pretty hostname.
+  - Assumes a primary user (name and group) for ownership of created resources.
+
+- **RPM Fusion repositories**
+  - Enables RPM Fusion Free and Nonfree for your current Fedora release.
+  - Refreshes package metadata after enabling the repos.
+
+- **Multimedia codecs**
+  - Installs `ffmpeg`, OpenH264, and a curated set of GStreamer plugins for broad media playback support (avoids fragile DNF group names).
+
+- **Secondary drive setup**
+  - Looks up a drive by filesystem label (e.g. `games`).
+  - Creates a mount point with chosen owner, group, and permissions.
+  - Adds an idempotent `UUID=…` entry to `/etc/fstab` and runs `mount -a`.
+
+- **Desktop applications (DNF)**
+  - Optionally installs:
+    - Steam
+    - Discord
+    - Syncthing
+    - Git
+
+- **Flatpak & Flathub**
+  - Installs Flatpak if missing.
+  - Adds the Flathub remote (only if not already present).
+  - Optionally installs:
+    - Signal (Flatpak)
+    - Beyond All Reason (Flatpak)
+
+- **VSCodium**
+  - Adds the VSCodium RPM repository (with GPG key).
+  - Installs the `codium` package.
+
+- **NVIDIA (optional)**
+  - Optionally installs NVIDIA akmods and CUDA-enabled driver packages.
+
+- **AMD GPU kernel parameters (Framework 16)**
+  - Optionally configures `GRUB_CMDLINE_LINUX_DEFAULT` with:
+    - `amdgpu.dcdebugmask=0x10`
+    - `amdgpu.ppfeaturemask=0xffffffff`
+  - Regenerates the GRUB configuration and prompts for reboot.
+
+All operations are idempotent: re-running the script will not duplicate configuration or re-add identical entries.
 
 ## Usage
 
-1. **Clone the repository or download the script**:
-    ```bash
-    git clone <repository-url>
-    cd <repository-directory>
-    ```
-
-2. **Make the script executable**:
-    ```bash
-    chmod +x setup_fedora.sh
-    ```
-
-3. **Run the script**:
-    ```bash
-    sudo ./setup_fedora.sh
-    ```
-
-4. **Or, if you are lazy, here is a oneliner with curl**:
-    ```bash
-    curl -s -o- https://raw.githubusercontent.com/mortalic/firstrun/main/fedora_first_run.sh | sudo bash
-    ```
-
-## Requirements
-
-- Fedora Linux (the script is tested on Fedora, adjustments might be necessary for other distributions).
-- Root permissions are required for most operations.
-
-## Components Configured
-
-- **RPM Fusion Repositories**
-- **Multimedia Codecs**
-- **Optional Software**:
-  - Syncthing
-  - Steam
-  - Discord
-  - Git
-  - Flatpak (including adding Flathub as a remote repository)
-  - Signal (via Flatpak)
-  - Beyond All Reason (via Flatpak)
-  - VSCodium
-  - Nvidia Drivers (including optional CUDA support)
-
-## Customization
-
-The script uses several global variables (`LABEL`, `USER`, `GROUP`, `PERMISSION`) to configure system settings. You can modify these variables in the script to suit your specific requirements.
-
-## Contributions
-
-Contributions to the script are welcome. Please ensure to test changes locally before submitting a pull request.
-
-## License
-
-GPL 3.0
-
-## Contact
-
-For bugs, feature requests, or other communications, open an issue, or better, open a Pull Request with the fix.
+1. **Clone and enter the repository**
+   ```bash
+   git clone <repository-url>
+   cd <repository-directory>
