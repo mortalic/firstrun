@@ -11,8 +11,11 @@ IFS=$'\n\t'
 USER_NAME="nathan"
 USER_GROUP="nathan"
 SET_HOSTNAME=1
-HOSTNAME_SHORT="nathan-framework16"
-HOSTNAME_PRETTY="Nathan Framework 16"
+HOSTNAME_SHORT="mortalic-framework16"
+HOSTNAME_PRETTY="Mortalic's Framework 16"
+
+# AMD GPU kernel parameters Stability enhancements (Framework 16)
+CONFIGURE_AMD_KERNEL_PARAMS=1
 
 # Secondary drive (by label)
 CONFIGURE_SECOND_DRIVE=1
@@ -88,6 +91,36 @@ if [[ $ENABLE_RPMFUSION -eq 1 ]]; then
   run dnf -y makecache || true
 else
   log "Skipping RPM Fusion"
+fi
+
+# AMD Kernel Parameters (Framework 16 optimization)
+CONFIGURE_AMD_KERNEL_PARAMS=1
+if [[ $CONFIGURE_AMD_KERNEL_PARAMS -eq 1 ]]; then
+  log "Configuring AMDGPU kernel parameters for Framework 16…"
+  
+  # Backup original grub config
+  run cp /etc/default/grub /etc/default/grub.bak.$(date +%Y%m%d_%H%M%S) || true
+  
+  # Ensure GRUB_CMDLINE_LINUX_DEFAULT exists with our AMD params
+  AMD_PARAMS="quiet amdgpu.dcdebugmask=0x10 amdgpu.ppfeaturemask=0xffffffff"
+  GRUB_DEFAULT_LINE="GRUB_CMDLINE_LINUX_DEFAULT=\"${AMD_PARAMS}\""
+  
+  if grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub 2>/dev/null; then
+    # Replace existing line
+    run sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|${GRUB_DEFAULT_LINE}|" /etc/default/grub
+    log "Updated existing GRUB_CMDLINE_LINUX_DEFAULT"
+  else
+    # Add new line after GRUB_CMDLINE_LINUX
+    run sed -i "/^GRUB_CMDLINE_LINUX=/a ${GRUB_DEFAULT_LINE}" /etc/default/grub
+    log "Added GRUB_CMDLINE_LINUX_DEFAULT line"
+  fi
+  
+  # Regenerate GRUB config (use standard Fedora path)
+  run grub2-mkconfig -o /boot/grub2/grub.cfg
+  log "GRUB config updated with AMD parameters: ${AMD_PARAMS}"
+  warn "REBOOT REQUIRED for kernel parameters to take effect"
+else
+  log "Skipping AMD kernel parameters"
 fi
 
 # 3) Multimedia codecs (avoid fragile group names like 'Multimedia')
