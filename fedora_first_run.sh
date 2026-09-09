@@ -44,6 +44,10 @@ INSTALL_VSCODIUM=1
 # NVIDIA drivers (only if truly needed)
 INSTALL_NVIDIA=0
 
+# Power management
+INSTALL_POWER_PROFILES=1
+INSTALL_AUTO_CPUFREQ=0      # Builds from source via the upstream installer
+
 # Dry-run mode for testing (0 = real run, 1 = print only)
 DRY_RUN=0
 
@@ -251,6 +255,34 @@ if [[ $INSTALL_NVIDIA -eq 1 ]]; then
   run dnf -y install akmod-nvidia xorg-x11-drv-nvidia-cuda || true
 else
   log "Skipping NVIDIA drivers"
+fi
+
+# 12) Power profiles daemon (fan/power control)
+if [[ ${INSTALL_POWER_PROFILES:-0} -eq 1 ]]; then
+  log "Installing power-profiles-daemon…"
+  run dnf -y install power-profiles-daemon || true
+else
+  log "Skipping power-profiles-daemon"
+fi
+
+# 13) auto-cpufreq (built from the upstream installer)
+if [[ ${INSTALL_AUTO_CPUFREQ:-0} -eq 1 ]]; then
+  if command -v auto-cpufreq >/dev/null 2>&1; then
+    log "auto-cpufreq already installed"
+  else
+    log "Installing auto-cpufreq from source…"
+    run dnf -y install git python3 python3-pip || true
+    SRC_DIR="/opt/auto-cpufreq"
+    if [[ -d "$SRC_DIR/.git" ]]; then
+      run git -C "$SRC_DIR" pull --ff-only || true
+    else
+      run git clone https://github.com/AdnanHodzic/auto-cpufreq.git "$SRC_DIR" || true
+    fi
+    run bash -c "cd '$SRC_DIR' && ./auto-cpufreq-installer --install" || \
+      warn "auto-cpufreq installer did not complete; run it manually from $SRC_DIR"
+  fi
+else
+  log "Skipping auto-cpufreq"
 fi
 
 log "Done. Re-run safely anytime; steps are idempotent."
