@@ -37,6 +37,7 @@ INSTALL_SYNCTHING=1
 INSTALL_FLATPAK=1
 INSTALL_SIGNAL_FLATPAK=1
 INSTALL_BAR_FLATPAK=0       # Beyond All Reason
+INSTALL_PROTONVPN_FLATPAK=1 # Proton VPN (seeds Stealth protocol config)
 
 # VSCodium
 INSTALL_VSCODIUM=1
@@ -218,6 +219,65 @@ if [[ $INSTALL_FLATPAK -eq 1 ]]; then
   if [[ $INSTALL_BAR_FLATPAK -eq 1 ]]; then
     log "Installing Beyond All Reason (Flatpak)…"
     run flatpak install -y flathub info.beyondallreason.bar || true
+  fi
+  if [[ ${INSTALL_PROTONVPN_FLATPAK:-0} -eq 1 ]]; then
+    log "Installing Proton VPN (Flatpak)…"
+    run flatpak install -y flathub com.protonvpn.www || true
+
+    # Seed Proton VPN settings with the Stealth protocol (protun-tls) so the
+    # tunnel is carried over TLS and reads as ordinary HTTPS on filtering
+    # networks. Alternative routing is NOT set here: the Linux client has no
+    # persisted toggle for it — it is built into the default transport and is
+    # always active. Written as the user, only if no settings file exists yet,
+    # so an existing/customised config is never clobbered.
+    USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6)
+    if [[ -n "$USER_HOME" ]]; then
+      PVPN_CFG_DIR="${USER_HOME}/.var/app/com.protonvpn.www/config/Proton/VPN"
+      PVPN_SETTINGS="${PVPN_CFG_DIR}/settings.json"
+      if [[ -f "$PVPN_SETTINGS" ]]; then
+        log "Proton VPN settings already present; leaving as-is"
+      else
+        log "Seeding Proton VPN settings (Stealth / protun-tls)…"
+        PVPN_SETTINGS_JSON='{
+    "protocol": "protun-tls",
+    "killswitch": 0,
+    "custom_dns": {
+        "enabled": false,
+        "ip_list": []
+    },
+    "ipv6": true,
+    "anonymous_crash_reports": true,
+    "features": {
+        "netshield": 0,
+        "moderate_nat": false,
+        "vpn_accelerator": true,
+        "port_forwarding": false,
+        "split_tunneling": {
+            "enabled": false,
+            "mode": "exclude",
+            "config_by_mode": {
+                "exclude": {
+                    "mode": "exclude",
+                    "app_paths": [],
+                    "ip_ranges": []
+                },
+                "include": {
+                    "mode": "include",
+                    "app_paths": [],
+                    "ip_ranges": []
+                }
+            }
+        }
+    },
+    "telemetry": false
+}'
+        run install -d -o "$USER_NAME" -g "$USER_GROUP" "$PVPN_CFG_DIR"
+        run bash -c "printf '%s\n' '$PVPN_SETTINGS_JSON' > '$PVPN_SETTINGS'"
+        run chown "$USER_NAME:$USER_GROUP" "$PVPN_SETTINGS"
+      fi
+    else
+      warn "Could not resolve home dir for '$USER_NAME'; skipping Proton VPN config seed"
+    fi
   fi
 else
   log "Skipping Flatpak setup"
