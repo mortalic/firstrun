@@ -224,12 +224,17 @@ if [[ $INSTALL_FLATPAK -eq 1 ]]; then
     log "Installing Proton VPN (Flatpak)…"
     run flatpak install -y flathub com.protonvpn.www || true
 
-    # Seed Proton VPN settings with the Stealth protocol (protun-tls) so the
-    # tunnel is carried over TLS and reads as ordinary HTTPS on filtering
-    # networks. Alternative routing is NOT set here: the Linux client has no
-    # persisted toggle for it — it is built into the default transport and is
-    # always active. Written as the user, only if no settings file exists yet,
-    # so an existing/customised config is never clobbered.
+    # Seed Proton VPN settings with OpenVPN over TCP (port 443) so the tunnel
+    # has the best chance on networks that filter VPN traffic. Proton's newer
+    # "Stealth" protocol (protun-tls) would be preferable, but its backend is
+    # not registered with NetworkManager in the current Flatpak build, so the
+    # client rejects it with "No valid implementation found for protun-tls".
+    # The protocols that actually validate here are wireguard, openvpn-tcp and
+    # openvpn-udp. Switch to Stealth in-app once a future Flatpak ships it.
+    # Alternative routing is NOT set here: the Linux client has no persisted
+    # toggle for it — it is built into the default transport and always active.
+    # Written as the user, only if no settings file exists yet, so an existing
+    # or customised config is never clobbered.
     USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6)
     if [[ -n "$USER_HOME" ]]; then
       PVPN_CFG_DIR="${USER_HOME}/.var/app/com.protonvpn.www/config/Proton/VPN"
@@ -237,9 +242,9 @@ if [[ $INSTALL_FLATPAK -eq 1 ]]; then
       if [[ -f "$PVPN_SETTINGS" ]]; then
         log "Proton VPN settings already present; leaving as-is"
       else
-        log "Seeding Proton VPN settings (Stealth / protun-tls)…"
+        log "Seeding Proton VPN settings (OpenVPN TCP)…"
         PVPN_SETTINGS_JSON='{
-    "protocol": "protun-tls",
+    "protocol": "openvpn-tcp",
     "killswitch": 0,
     "custom_dns": {
         "enabled": false,
