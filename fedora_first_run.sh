@@ -11,14 +11,14 @@ IFS=$'\n\t'
 USER_NAME="nathan"
 USER_GROUP="nathan"
 SET_HOSTNAME=1
-HOSTNAME_SHORT="mortalic-framework16"
-HOSTNAME_PRETTY="Mortalic's Framework 16"
+HOSTNAME_SHORT="x1carbon"
+HOSTNAME_PRETTY="Mortalic's x1carbon"
 
 # AMD GPU kernel parameters Stability enhancements (Framework 16)
-CONFIGURE_AMD_KERNEL_PARAMS=1
+CONFIGURE_AMD_KERNEL_PARAMS=0
 
 # Secondary drive (by label)
-CONFIGURE_SECOND_DRIVE=1
+CONFIGURE_SECOND_DRIVE=0
 SECOND_DRIVE_LABEL="games"            # e.g. your Steam library
 SECOND_DRIVE_MOUNT="/mnt/${SECOND_DRIVE_LABEL}"
 SECOND_DRIVE_MODE="0755"
@@ -28,19 +28,23 @@ ENABLE_RPMFUSION=1
 INSTALL_MULTIMEDIA=1        # Uses ffmpeg + gstreamer rather than fragile Group names
 
 # Apps (DNF)
-INSTALL_GIT=1
+INSTALL_GIT=0
 INSTALL_STEAM=1
 INSTALL_DISCORD=1
-INSTALL_SYNCTHING=1
+INSTALL_SYNCTHING=0
 
 # Flatpak & apps
 INSTALL_FLATPAK=1
-INSTALL_SIGNAL_FLATPAK=1
+INSTALL_SIGNAL_FLATPAK=0
 INSTALL_BAR_FLATPAK=0       # Beyond All Reason
-INSTALL_PROTONVPN_FLATPAK=1 # Proton VPN (seeds Stealth protocol config)
+INSTALL_PROTONVPN_FLATPAK=0 # Proton VPN (seeds Stealth protocol config)
 
 # VSCodium
 INSTALL_VSCODIUM=1
+
+# Tailscale (adds official repo, installs, enables tailscaled)
+INSTALL_TAILSCALE=1
+TAILSCALE_AUTHKEY=""        # Optional: tskey-auth-… to join the tailnet non-interactively; leave empty to run 'tailscale up' yourself
 
 # NVIDIA drivers (only if truly needed)
 INSTALL_NVIDIA=0
@@ -95,7 +99,6 @@ else
 fi
 
 # AMD Kernel Parameters (Framework 16 optimization)
-CONFIGURE_AMD_KERNEL_PARAMS=1
 if [[ $CONFIGURE_AMD_KERNEL_PARAMS -eq 1 ]]; then
   log "Configuring AMDGPU kernel parameters for Framework 16…"
   
@@ -309,7 +312,35 @@ else
   log "Skipping VSCodium"
 fi
 
-# 11) NVIDIA drivers (if you truly need them)
+# 11) Tailscale repo + install + enable (idempotent)
+if [[ ${INSTALL_TAILSCALE:-0} -eq 1 ]]; then
+  need curl
+  log "Setting up Tailscale repo + installing tailscale…"
+  TS_REPO_URL="https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
+  TS_REPO_FILE="/etc/yum.repos.d/tailscale.repo"
+
+  if [[ -f "$TS_REPO_FILE" ]]; then
+    log "Tailscale repo already exists"
+  else
+    log "Creating $TS_REPO_FILE"
+    run curl -fsSL -o "$TS_REPO_FILE" "$TS_REPO_URL" || warn "Failed to fetch Tailscale repo file"
+  fi
+  run dnf -y install tailscale || true
+
+  log "Enabling tailscaled service…"
+  run systemctl enable --now tailscaled || warn "Could not enable tailscaled"
+
+  if [[ -n "$TAILSCALE_AUTHKEY" ]]; then
+    log "Joining tailnet with auth key…"
+    run tailscale up --auth-key="$TAILSCALE_AUTHKEY" || warn "tailscale up failed; run 'sudo tailscale up' manually"
+  else
+    warn "Tailscale installed but not logged in. Run: sudo tailscale up"
+  fi
+else
+  log "Skipping Tailscale"
+fi
+
+# 12) NVIDIA drivers (if you truly need them)
 if [[ $INSTALL_NVIDIA -eq 1 ]]; then
   log "Installing NVIDIA akmods & CUDA packages…"
   run dnf -y upgrade --refresh || true
