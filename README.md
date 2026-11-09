@@ -38,6 +38,11 @@ This script automates post-install configuration on Fedora 43, enabling common r
   - Adds the VSCodium RPM repository (with GPG key).
   - Installs the `codium` package.
 
+- **Tailscale (optional)**
+  - Adds the official Tailscale RPM repository.
+  - Installs `tailscale` and enables the `tailscaled` service.
+  - Joins your tailnet automatically if `TAILSCALE_AUTHKEY` is set; otherwise reminds you to run `sudo tailscale up`.
+
 - **NVIDIA (optional)**
   - Optionally installs NVIDIA akmods and CUDA-enabled driver packages.
 
